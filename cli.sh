@@ -1,0 +1,232 @@
+#!/bin/bash
+# Project Management CLI
+# ==============================================================================
+#
+# Utility CLI tool automating setup up, deployment, and general project 
+# management.
+#
+# Helps work with AWS infrastructure, particularly AWS CDK.
+#
+# See README.org for more details and usage examples.
+# ------------------------------------------------------------------------------
+
+set -e # Exit immediately if any command returns a non-zero status
+
+SCRIPT_DIR=$(cd $(dirname $0) && pwd)
+WORKING_DIR=$(pwd)
+
+FNAME=${0##/*}
+DIRNAME=${WORKING_DIR##*/}
+
+HANDLER_DIR="$WORKING_DIR/src"
+CONFIG_FILE="$WORKING_DIR/config.py"
+OUTPUT_FILE="$WORKING_DIR/bin/package.zip"
+
+ENV_PROD=".venv_prod"
+ENV_DEV=".venv_dev"
+
+log() {
+    script_name=${0##*/}
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    echo "== $script_name $timestamp >> $@"
+}
+
+# ==============================================================================
+# Required Config & Environment variables
+# ==============================================================================
+
+create_config() {
+    if [ -f "$CONFIG_FILE" ]; then
+        read -p "$CONFIG_FILE exists. Overwrite it? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY = "y" ]] || [[ $REPLY = "Y" ]]
+        then
+            cp config.template "$CONFIG_FILE"
+            log "Overwrote config file."
+        fi
+    else
+        cp config.template "$CONFIG_FILE"
+        log "Created config file."
+    fi
+}
+
+# Returns the value of the given config variable
+#
+# Usage:
+#   get_config <key>
+#
+# Arguments:
+#   key: The config variable name (string)
+#
+# Example: AWS_PROFILE=$(get_config AWS_PROFILE)
+# ------------
+get_config() {
+    export PYTHONDONTWRITEBYTECODE=1 # Prevent any .pyc generation
+    python -c "from config import $1; print($1)"
+}
+
+# ==============================================================================
+# Utilities
+# ==============================================================================
+
+# Removes all packages from a virtual environment
+#
+# Usage:
+#   clear_venv <name>
+#
+# Arguments:
+#   name: The name of the environment (string)
+#
+# Example: clear_venv $ENV_DEV
+# ------------
+clear_venv() {
+    source $1/bin/activate
+    pip freeze | xargs pip uninstall -y
+}
+
+# ==============================================================================
+# CLI Commands
+# ==============================================================================
+
+cdk_bootstrap() {
+    source $ENV_DEV/bin/activate
+    ACCOUNT=$(get_config AWS_ACCOUNT)
+    REGION=$(get_config AWS_REGION)
+    PROFILE=$(get_config AWS_PROFILE)
+    cdk bootstrap aws://$ACCOUNT/$REGION --profile $PROFILE
+}
+
+cdk_destroy() {
+    source $ENV_DEV/bin/activate
+    ACCOUNT=$(get_config AWS_ACCOUNT)
+    REGION=$(get_config AWS_REGION)
+    PROFILE=$(get_config AWS_PROFILE)
+    cdk destroy --all --profile $PROFILE
+    log "!!NOTE: DyanamoDB tables were probably not deleted, check output!!"
+}
+
+build() {
+    log "Building..."
+
+    source $ENV_PROD/bin/activate
+    pip install -r requirements/prod.txt
+
+    # Ensure output dir exists with no file
+    rm -f $OUTPUT_FILE
+    dir_name=$(dirname "$OUTPUT_FILE")
+    mkdir -p $dir_name
+
+    site_packages=$(python -c "import sys; print(sys.path[-1])")
+    cd $site_packages
+    zip -r $OUTPUT_FILE .
+
+    cd $HANDLER_DIR
+    zip -r $OUTPUT_FILE .
+
+    log "Finished building output file: $OUTPUT_FILE"
+}
+
+deploy() {
+    log "Deploying..."
+
+    source $ENV_DEV/bin/activate
+
+    cdk synth
+
+    PROFILE=$(get_config AWS_PROFILE)
+    cdk deploy --profile $PROFILE
+
+    log "Finished deploying"
+}
+
+setup() {
+
+    log "Creating dev environment"
+    python3 -m venv $ENV_DEV
+    source $ENV_DEV/bin/activate
+    pip install -r requirements/dev.txt
+    pip install -r requirements/prod.txt
+    deactivate
+
+    log "Creating prod environment"
+    python3 -m venv $ENV_PROD
+    source $ENV_PROD/bin/activate
+    pip install -r requirements/prod.txt
+    deactivate
+
+    create_config
+
+    log "Finished setting up project"
+}
+
+teardown() {
+    read -p "Are you sure you want to remove generated files? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY = "y" ]] || [[ $REPLY = "Y" ]]
+    then
+        rm -rf $ENV_DEV
+        rm -rf $ENV_PROD
+        rm -rf $CONFIG_FILE
+        log "Tore down generated files"
+    fi
+}
+
+help() {
+    echo "
+    $DIRNAME Development CLI
+
+    Commands should be executed from project root directory:
+     e.g ~/.../$DIRNAME/
+
+    Usage: $FNAME [command]
+
+    Commands:
+    ================ Core ======================================================
+    setup       (s)     Setup project for development
+    build       (b)     Builds project to bin/package.zip
+    deploy      (d)     Deploys project to AWS
+    help        (*)	    Help
+    ---------------- Utility & One-Offs ----------------------------------------
+    teardown            Tears down anything generated by setup
+    clear_dev           Clears the dev virtual environment completely
+    cdk_bootstrap       Runs the cdk bootstrap for your defined environment
+    cdk_destroy         Runs the cdk destroy for your defined environment and
+                        removes all resources associated with your project
+    "
+}
+
+set -x # Prints each command to std:err
+
+case "$1" in
+    setup|s)
+        setup
+    ;;
+
+    teardown)
+        teardown
+    ;;
+
+    build|b)
+        build
+    ;;
+
+    deploy|d)
+        deploy
+    ;;
+
+    clear_dev)
+        clear_venv $ENV_DEV
+    ;;
+
+    cdk_bootstrap)
+        cdk_bootstrap
+    ;;
+
+    cdk_destroy)
+        cdk_destroy
+    ;;
+
+    *)
+        help
+    ;;
+esac

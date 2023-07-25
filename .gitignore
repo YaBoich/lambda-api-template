@@ -1,0 +1,15 @@
+
+# Generated binaries, zip files & cdk stuff
+bin
+cdk.out
+
+# Virtual environments & Python stuff
+.venv_dev
+.venv_prod
+__pycache__
+
+# Development environments
+.vscode
+
+# Env, Keys & Secrets
+config.py

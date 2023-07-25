@@ -1,0 +1,12 @@
+# ==============================================================================
+# NOTE: Requirements are added here manually.
+#       Do not override with something like:
+#           ```pip freeze > requirements.txt```
+#       This will include dependancies of dependancies.
+#       Only add top-level dependancies.
+#
+#  Boto3 is included in lambda by default, do not add it here as it makes
+#  package size very large.
+# ==============================================================================
+
+urllib3<2 # boto3 requirement: https://github.com/MOV-AI/mobros-build-system/pull/76

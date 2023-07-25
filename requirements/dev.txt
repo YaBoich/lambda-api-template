@@ -1,0 +1,10 @@
+# ==============================================================================
+# NOTE: Requirements are added here manually.
+#       Do not override with something like:
+#           ```pip freeze > requirements.txt```
+#       This will include dependancies of dependancies.
+#       Only add top-level dependancies.
+# ==============================================================================
+
+aws-cdk-lib==2.88.0
+boto3==1.28.9       # Included with lambda, don't include in prod package

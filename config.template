@@ -1,0 +1,10 @@
+"""
+Module containing project environment variables, keys, secrets, and configuration.
+
+NOTE: Do not manually add values here without updating the config.template file
+"""
+
+# AWS Variables
+AWS_ACCOUNT = ""  # Account Number: "12345678901"
+AWS_REGION = ""   # Region: "eu-west-1"
+AWS_PROFILE = ""  # CLI Profile Name: `aws configure --profile <this>`
